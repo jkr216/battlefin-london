@@ -35,18 +35,8 @@ To install a package on your computer, run `install.packages("name of package")`
 Here are the commands to get the packages for today's workshop.
 
 
-### Rmarkdown
-
-The file we are looking at and using today is called an `RMarkdown` file. It's a file format that let's us interweave code chunks that look like this: 
-
-```{r}
-plot(mtcars)
-```
-
-Along with plain text prose, which is what we are reading right now. We can then `knit` this to a PDF, an HTML file or a Notebook. We could have used an R script, which would have the file extension `.R`. Click `file` -> `New File` -> `R Script` to open an R script. Click `file` -> `New File` -> `R Notebook` to open an Rmarkdown Notebook.
-
 ### Load the packages
-All my R Notebooks start with this step. We need our tools! 
+ 
 
 ```{r setup, message = FALSE, warning = FALSE}
 # I have already loaded up these packages so we don't have to wait. 
@@ -87,7 +77,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE, comment = NA)
 
 ### Our data for today
 
-Our data for today == price and volume data for several ETFs 
+Our data for today is price and volume data for several ETFs 
 
     + "SPY"
     + "EFA"
@@ -98,7 +88,7 @@ Our data for today == price and volume data for several ETFs
     + "VNQ"
     + "UUP"
 
-How, why, where did it come from? 
+How, why, where did it come from? Important to document this or at least mention it in a comment or note to self.
 
 Often this will involve grabbing data from internal databases, or from a repository set up by a vendor, or from someone emailing us excel and csv files.
 
@@ -110,6 +100,7 @@ Always, always, paste the full code into the script. Future you will thank past 
 
 ```{r}
 library(readxl)
+
 # why did I name it 'tibble'? what's a 'tibble'? 
 prices_tibble <- 
   read_excel("prices.xlsx") %>% 
@@ -142,7 +133,7 @@ volume_tibble %>%
 
 This is called the 'pipe' operator. It chains together our functions so we don't have to create new objects each time we do something. It will appear dozens of times today and by the end you'll be tired of seeing it. We can think of this as reading `and then`, it tells the code to keep processing and moving to the next function. 
 
-We think it makes code more readable and logical, and it saves us from having to create new variable at each line.
+It makes code more readable and logical, and it saves us from having to create new variable at each line.
 
 ### Tidy versus wide data
 
@@ -176,10 +167,6 @@ tidy_prices %>%
   slice(1:3)
 ```
 
-
-```{r}
-symbols <- sort(c("TLT", "AGG", "SPY", "EEM", "UUP", "VNQ", "IJS"))
-```
 
 ```{r}
 tidy_prices %>% 
@@ -293,6 +280,7 @@ price_volume %>%
   hc_tooltip(pointFormat = "{point.symbol}: ${point.price: .2f}")
 ```
 
+
 ```{r}
 price_volume %>%
   hchart(., hcaes(x = date, y = volume, group = symbol),
@@ -300,39 +288,6 @@ price_volume %>%
   hc_title(text = "Daily Volumes") %>% 
   hc_tooltip(pointFormat = "{point.symbol}: {point.volume}")
 ```
-
-### Add labels to our data
-
-Create a new data frame with `tibble()` and peek at results with `slice()`. 
-
-```{r}
-labels <- 
-tibble(
-symbol = symbols,
-category = c("treas","bond", "US", "emerging", "currency", "RE", "small_cap")
-)
-
-price_volume_lbl <-
-price_volume %>% 
-  left_join(labels, by = "symbol") %>% 
-  group_by(symbol) %>% 
-  # summarise(vol = mean(volume))
-  mutate(vol_label = case_when(mean(volume) > 5000000 ~ "high volume", 
-                                TRUE ~ "low vol"))
-
-price_volume_lbl %>% 
-  slice(1)
-
-```
-
-So far, we have: 
-
-    + imported data from CSV and excel
-    + made sure the dates were in a good format
-    + done some quick exploratory visualization
-    + coerced data in tidy format
-    + joined price volume
-    + added labels
 
 ### Fama French Data
 
@@ -383,18 +338,13 @@ Global_5_Factors_Daily %>%
   tail()
 ```
  
-We have a column called date, just as we do in our `prices_volume_lbl` tibble. Let's join!
+We have a column called date, just as we do in our `prices_volume` tibble. Let's join!
 
 ```{r}
 funds_ff_joined <-
-price_volume_lbl %>% 
+price_volume %>% 
   left_join(Global_5_Factors_Daily, by = "date") %>% 
-  group_by(symbol)
-
-
-funds_ff_joined <-
-price_volume_lbl %>% 
-  left_join(Global_5_Factors_Daily, by = "date") %>% 
+  group_by(symbol) %>% 
   na.omit()
 ```
 
@@ -412,25 +362,6 @@ Let's create a new returns column, which we might want to model/predict, and new
 
 Start with a simple transformation of daily prices to log returns. Not complicated but now we're changing this data, and that's an important step. 
 
-```{r}
-funds_ff_joined %>% 
-  group_by(symbol) %>% 
-  mutate(daily_returns = price/lag(price) - 1) %>%
-  select(date, symbol, daily_returns) %>% 
- # slice(1:2) %>% 
-  filter(symbol == "SPY")
-
-```
-What about 10 day returns? Use `mutate()` and `lag()`. 
-
-```{r}
-funds_ff_joined %>% 
-  group_by(symbol) %>% 
-  mutate(daily_returns = price/lag(price, 10) - 1) %>%
-  select(date, symbol, daily_returns) %>% 
-  slice(1:2)
-
-```
 
 ```{r}
 funds_ff_returns <- 
@@ -438,36 +369,11 @@ funds_ff_returns <-
   mutate(daily_returns = price/lag(price) - 1)
 ```
 
-### XTS and Performance Analytics
-
-```{r}
-library(timetk)
-funds_ff_returns_xts <- 
-  funds_ff_returns %>% 
-  select(date, symbol, daily_returns ) %>% 
-  spread(symbol, daily_returns) %>% 
-  tk_xts(date_var = date) 
-# tk_tbl()
-
-funds_ff_returns_xts %>% 
-  head()
-
-funds_ff_returns_xts %>% 
- #table.Stats()
- #table.InformationRatio(Rb = .$SPY)
- # table.Autocorrelation()
-  # table.CAPM(Rb = .$SPY)
-  table.DownsideRisk()
-  # table.SpecificRisk(Rb = .$SPY)
-  # table.Variability()
-  # table.TrailingPeriods()
-```
-
 ### Getting our data ready for modeling
 
 Now let's create some predictor columns, perhaps we want to incorporate a normalized volume and price trend. We can calculate the rolling 50-day and 200-day means and the rolling z-scored volume.
 
-First, let's create some rolling functions using the amazing `rollify`!
+First, let's create some rolling functions using the amazing `rollify` from the `tibbletime` package!
 
 ```{r}
 library(tibbletime)
@@ -480,10 +386,7 @@ sd_50 <- rollify(sd, window = 50)
 
 Now we combine our custom rolling functions with `mutate()` to create new columns.
 
-
 Luckily R has also some fantastic finance pacakges with helpful functions already constructed. The `TTR` package lets us add technical indicators. Let's add `MACD` and `CCI`. We use `tq_mutate()` to add those columns and indicators.
-
-Let's create and save a full engineered set.
 
 ```{r}
 funds_ff_full <- 
@@ -521,6 +424,7 @@ funds_ff_full %>%
 
 ```
 
+
 ```{r}
 funds_ff_full %>% 
   filter(symbol == "EEM") %>%
@@ -528,6 +432,7 @@ funds_ff_full %>%
   geom_histogram(fill = "cornflowerblue", color = "pink", bins = 60) 
 
 ```
+
 
 ```{r}
 min_date <- "2006-01-01"
