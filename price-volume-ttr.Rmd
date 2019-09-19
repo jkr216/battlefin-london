@@ -3,7 +3,15 @@ title: "Import Wrangle Explore"
 output:
   html_document:
     df_print: paged
+    toc: true
+    toc_float: true
 ---
+
+```{r init, message = FALSE, warning = FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, comment = NA)
+```
+
+## Introduction
 
 ### What is R and RStudio? 
 
@@ -35,9 +43,6 @@ To install a package on your computer, run `install.packages("name of package")`
 Here are the commands to get the packages for today's workshop.
 
 
-### Load the packages
- 
-
 ```{r setup, message = FALSE, warning = FALSE}
 # I have already loaded up these packages so we don't have to wait. 
 # If you were starting this project fresh on a new computer, would need to remove the 
@@ -59,7 +64,15 @@ Here are the commands to get the packages for today's workshop.
 # 
 # for (pkg in c('tidyquant', 'tidyverse', 'plotly', 'highcharter', 'timetk', 'corrr', 'scales', 'tidymodels', 'tibbletime', 'readxl')) 
 #   if (!requireNamespace(pkg)) install.packages(pkg)
+```
 
+
+## Loading the data
+
+### Load the packages
+
+
+```{r load}
 library(tidymodels)
 library(tidyverse) 
 library(tidyquant)
@@ -70,8 +83,6 @@ library(readxl)
 library(corrr)
 library(scales)
 library(plotly)
-
-knitr::opts_chunk$set(message = FALSE, warning = FALSE, comment = NA)
 ```
 
 
@@ -79,14 +90,14 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE, comment = NA)
 
 Our data for today is price and volume data for several ETFs 
 
-    + "SPY"
-    + "EFA"
-    + "IJS"
-    + "EEM"
-    + "AGG"
-    + "TLT"
-    + "VNQ"
-    + "UUP"
++ "SPY"
++ "EFA"
++ "IJS"
++ "EEM"
++ "AGG"
++ "TLT"
++ "VNQ"
++ "UUP"
 
 How, why, where did it come from? Important to document this or at least mention it in a comment or note to self.
 
@@ -98,7 +109,9 @@ Before getting to code, click on the file and notice how to use the `Import Data
 
 Always, always, paste the full code into the script. Future you will thank past you.
 
-```{r}
+## Transforming the data
+
+```{r prices_tibble}
 library(readxl)
 
 # why did I name it 'tibble'? what's a 'tibble'? 
@@ -107,24 +120,26 @@ prices_tibble <-
   mutate(date = ymd(date))
 
 #View(prices_tibble)
-  
+
 prices_tibble %>% 
   tail()
 ```
 
 Let's get data from a csv format. People love to email around csv's and excel files! 
 
-```{r}
+```{r volume_tibble}
 library(readr)
 volume_tibble <- 
   read_csv("volume.csv") %>% 
   mutate(date = ymd(date))
 
 #View(volume_tibble)
-  
+
 volume_tibble %>% 
   slice(1)
+```
 
+```{r}
 volume_tibble %>% 
   colnames()
 ```
@@ -141,12 +156,12 @@ What is tidy data? Why is it valuable?
 
 There are three interrelated rules which make a dataset tidy:
 
-    + Each variable must have its own column.
-    + Each observation must have its own row.
-    + Each value must have its own cell.
-    
++ Each variable must have its own column.
++ Each observation must have its own row.
++ Each value must have its own cell.
+
 Simple definition of tidy data - it took Hadley years!
-    
+
 r4ds.had.co.nz/tidy-data.html
 
 Converting from wide to tidy is not intuitive. It takes practice and trial/error (at least, it took me a lot of practice and trial/error).
@@ -159,7 +174,7 @@ Key functions:
 
 ```{r}
 tidy_prices <-
-prices_tibble %>% 
+  prices_tibble %>% 
   gather(symbol, price, -date) %>% 
   group_by(symbol)
 
@@ -181,7 +196,7 @@ Let's repeat this process for our volume data.
 ```{r}
 
 tidy_volume <-
-volume_tibble %>% 
+  volume_tibble %>% 
   gather(symbol, volume, -date) %>% 
   group_by(symbol)
 
@@ -196,7 +211,7 @@ Let's `join` them together into one data set. Have a quick look and notice they 
 ```{r}
 
 price_volume <- 
-tidy_prices %>% 
+  tidy_prices %>% 
   left_join(tidy_volume, by = c("date", "symbol"))
 
 price_volume %>% 
@@ -207,23 +222,24 @@ price_volume %>%
 # readr::write_excel_csv()
 ```
 
+## Visualizing the data
 
-### data visualization
+### Static plotting with ggplot2
 
 Let's start with `ggplot2`
 
 A little background
 
-    + part of the tidyverse and works well with tidy data
-    + grammar of graphics
-    + most popular data vis package
-    + layers and geoms
-    
++ part of the tidyverse and works well with tidy data
++ grammar of graphics
++ most popular data vis package
++ layers and geoms
+
 Why visualize now? All we did was import some data: 
 
-   + find errors or missing data now
-   + start getting to know our data
-   
++ find errors or missing data now
++ start getting to know our data
+
 Let's create a line chart of prices, first on one chart, then with an individual panel for each symbol.
 
 ```{r}
@@ -249,9 +265,9 @@ How about a scatter plot?
 ```{r}
 price_volume %>%
   ggplot(aes(x = volume, y = price, color = symbol)) +
- # ggplot(aes(x = date, y = price, color = symbol)) +
+  # ggplot(aes(x = date, y = price, color = symbol)) +
   geom_point() +
- theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   facet_wrap(~symbol, scales = "free")
 ```
 
@@ -263,11 +279,11 @@ The magical `ggplotly()` function makes it fast to get started with plotly. We c
 
 ```{r}
 ggplotly(
-price_volume %>%
-  ggplot(aes(x = date, y = price, color = symbol)) +
-  geom_line() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  facet_wrap(~symbol, scales = "free")
+  price_volume %>%
+    ggplot(aes(x = date, y = price, color = symbol)) +
+    geom_line() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    facet_wrap(~symbol, scales = "free")
 )
 ```
 
@@ -287,18 +303,20 @@ price_volume %>%
 
 
 
+## Merging multiple data sources
+
 ### Fama French Data
 
 What if we wish to bring in data from an outside source, like an alternative data provider, and mash it together with our price volume data? It's data from a different source, probably in a weird format. We need to import it, then get it into shape to be used with our other data. Very often that will mean coercing dates into a common format. We will work with Fama French data, which is hosted on their website in zipped csv files.
-     
+
 We first need the address where the zip files live
-     
+
 ```{r}
 # Homepage URL: 
 # http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html#Research
 
 factors_data_address <- 
-"http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_5_Factors_Daily_CSV.zip"
+  "http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/Global_5_Factors_Daily_CSV.zip"
 ```
 
 Next we download them to a temporary file location.
@@ -325,8 +343,8 @@ csv_file <-
 
 Global_5_Factors_Daily <- 
   read_csv(unz(temp, csv_file), 
-    col_types = cols(X1 = col_date(format = "%Y%m%d")), 
-    skip = 6) %>% 
+           col_types = cols(X1 = col_date(format = "%Y%m%d")), 
+           skip = 6) %>% 
   rename(date = X1, MKT = `Mkt-RF`) %>%
   mutate_if(is.numeric, funs(. / 100)) %>% 
   select(-RF)
@@ -335,12 +353,12 @@ Global_5_Factors_Daily <-
 Global_5_Factors_Daily %>% 
   tail()
 ```
- 
+
 We have a column called date, just as we do in our `prices_volume` tibble. Let's join again!
 
 ```{r}
 funds_ff_joined <-
-price_volume %>% 
+  price_volume %>% 
   left_join(Global_5_Factors_Daily, by = "date") %>% 
   group_by(symbol) %>% 
   na.omit()
@@ -399,7 +417,7 @@ We use `tq_mutate()` to add those columns and indicators. We can do all of this 
 
 ```{r}
 funds_ff_full <- 
-funds_ff_returns %>% 
+  funds_ff_returns %>% 
   mutate(
     price_sma_50 = sma_50(price),
     price_sma_200 = sma_200(price),
@@ -414,7 +432,7 @@ funds_ff_returns %>%
             n = 20) %>% 
   na.omit()
 
-save("funds_ff_full.RData")
+save(funds_ff_full, file = "funds_ff_full.RData")
 ```
 
 ### Visualizations
@@ -449,7 +467,7 @@ funds_ff_full %>%
 
 ```{r}
 funds_ff_full %>% 
-#  filter(symbol == "EEM") %>%
+  #  filter(symbol == "EEM") %>%
   ggplot(aes(x = scaled_vol)) +
   geom_histogram(fill = "cornflowerblue", color = "pink", bins = 60) +
   facet_wrap(~symbol)
@@ -459,16 +477,20 @@ funds_ff_full %>%
 sma 50, sma 200 and price time series
 ```{r}
 
-ggplotly(
-funds_ff_full %>% 
-  #filter(symbol == "IJS") %>%
-  select(date, symbol, price, price_sma_200, price_sma_50) %>% 
-  ggplot(aes(x = date)) +
-  geom_line(aes(y = price), color = "purple", linetype = "dashed", alpha = .3) +
-  geom_line(aes(y = price_sma_200), color = "cornflowerblue") +
-  geom_line(aes(y = price_sma_50), color = "pink") +
-  labs(x = "", y = "price stats") +
-  facet_wrap(~symbol, scales = "free")
-)
+(funds_ff_full %>% 
+   #filter(symbol == "IJS") %>%
+   select(date, symbol, price, price_sma_200, price_sma_50) %>% 
+   ggplot(aes(x = date)) +
+   geom_line(aes(y = price), color = "purple", linetype = "dashed", alpha = .3) +
+   geom_line(aes(y = price_sma_200), color = "cornflowerblue") +
+   geom_line(aes(y = price_sma_50), color = "pink") +
+   labs(x = "", y = "price stats") +
+   facet_wrap(~symbol, scales = "free")
+) %>% 
+  ggplotly()
 ```
 
+
+## Wrapup
+
+To be completed.
