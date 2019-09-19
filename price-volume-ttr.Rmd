@@ -163,10 +163,9 @@ prices_tibble %>%
   gather(symbol, price, -date) %>% 
   group_by(symbol)
 
-tidy_prices %>% 
-  slice(1:3)
 ```
 
+Use `slice()` to choose rows and `select()` to choos columns.
 
 ```{r}
 tidy_prices %>% 
@@ -176,6 +175,8 @@ tidy_prices %>%
 
 
 Notice how `slice(1:3)` grabbed the first 3 rows of each group, it respected our `group_by()`. I use this as a way to peek at the first few rows of each group, to make sure nothing weird jumps out at the beginning.
+
+Let's repeat this process for our volume data.
 
 ```{r}
 
@@ -233,6 +234,8 @@ price_volume %>%
   facet_wrap(~symbol, scales = "free")
 ```
 
+Let's do the same with volume data.
+
 ```{r}
 price_volume %>% 
   ggplot(aes(x = date, y = volume, color = symbol)) +
@@ -251,6 +254,8 @@ price_volume %>%
  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   facet_wrap(~symbol, scales = "free")
 ```
+
+The key to `ggplot` is the different `geom_` layers. We can different layers, shapes and aesthetics.
 
 ### Interactve charting with plotly
 
@@ -281,17 +286,10 @@ price_volume %>%
 ```
 
 
-```{r}
-price_volume %>%
-  hchart(., hcaes(x = date, y = volume, group = symbol),
-         type = "line") %>% 
-  hc_title(text = "Daily Volumes") %>% 
-  hc_tooltip(pointFormat = "{point.symbol}: {point.volume}")
-```
 
 ### Fama French Data
 
-What if we wish to bring in data from an outside source, like an alternative data provider, and mash it together with our data? It's data from a different source, probably in a weird format. We need to import it, then get it into shape to be used with our other data. Very often that will mean coercing dates into a common format. We will work with Fama French data, which is hosted on their website in zipped csv files.
+What if we wish to bring in data from an outside source, like an alternative data provider, and mash it together with our price volume data? It's data from a different source, probably in a weird format. We need to import it, then get it into shape to be used with our other data. Very often that will mean coercing dates into a common format. We will work with Fama French data, which is hosted on their website in zipped csv files.
      
 We first need the address where the zip files live
      
@@ -338,7 +336,7 @@ Global_5_Factors_Daily %>%
   tail()
 ```
  
-We have a column called date, just as we do in our `prices_volume` tibble. Let's join!
+We have a column called date, just as we do in our `prices_volume` tibble. Let's join again!
 
 ```{r}
 funds_ff_joined <-
@@ -346,9 +344,12 @@ price_volume %>%
   left_join(Global_5_Factors_Daily, by = "date") %>% 
   group_by(symbol) %>% 
   na.omit()
+
+funds_ff_joined %>% 
+  tail()
 ```
 
-We now have a tibble, of daily fund prices and volumes, and Fama French factors, from March 3, 2007 through January 31, 2019. 
+We now have a tibble, of daily fund prices and volumes, and Fama French factors, from March 3, 2007 through April 4, 2019. 
 
 
 ### Transform data from daily prices to daily returns
@@ -367,6 +368,10 @@ Start with a simple transformation of daily prices to log returns. Not complicat
 funds_ff_returns <- 
   funds_ff_joined %>% 
   mutate(daily_returns = price/lag(price) - 1)
+
+funds_ff_returns %>% 
+  select(date, daily_returns) %>% 
+  slice(1:3)
 ```
 
 ### Getting our data ready for modeling
@@ -386,24 +391,28 @@ sd_50 <- rollify(sd, window = 50)
 
 Now we combine our custom rolling functions with `mutate()` to create new columns.
 
-Luckily R has also some fantastic finance pacakges with helpful functions already constructed. The `TTR` package lets us add technical indicators. Let's add `MACD` and `CCI`. We use `tq_mutate()` to add those columns and indicators.
+Luckily R has also some fantastic finance pacakges with helpful functions already constructed. 
+
+The `TTR` package lets us add technical indicators. Let's add `MACD` and `CCI`. 
+
+We use `tq_mutate()` to add those columns and indicators. We can do all of this in one piped flow, without creating new objects each time.
 
 ```{r}
 funds_ff_full <- 
 funds_ff_returns %>% 
   mutate(
-         price_sma_50 = sma_50(price),
-         price_sma_200 = sma_200(price),
-         sma_signal = if_else(price_sma_50 > price_sma_200, 1, 0),
-         scaled_vol = (volume - sma_50(volume))/sd_50(volume)) %>% 
+    price_sma_50 = sma_50(price),
+    price_sma_200 = sma_200(price),
+    sma_signal = if_else(price_sma_50 > price_sma_200, 1, 0),
+    scaled_vol = (volume - sma_50(volume))/sd_50(volume)) %>% 
   tq_mutate(select     = price, 
-              mutate_fun = MACD, 
-              col_rename = c("MACD", "Signal")) %>% 
+            mutate_fun = MACD, 
+            col_rename = c("MACD", "Signal")) %>% 
   tq_mutate(select     = price, 
-              mutate_fun = CCI, 
-              col_rename = "CCI",
-             n = 20) %>% 
-na.omit()
+            mutate_fun = CCI, 
+            col_rename = "CCI",
+            n = 20) %>% 
+  na.omit()
 
 save("funds_ff_full.RData")
 ```
@@ -412,57 +421,54 @@ save("funds_ff_full.RData")
 
 We could head straight to modeling this data and extracting predictions but I like to build a few visualizations first. Who knows what sorts of patterns might emerge?
 
+SMA 50, SMA 200 and scaled volume for EEM and SPY
+
 ```{r}
 funds_ff_full %>% 
-  filter(symbol == "EEM") %>%
-  ungroup() %>% 
-  select(date, scaled_vol, price_sma_50) %>% 
-  gather(stat, value, -date) %>% 
+  filter(symbol == "EEM" | symbol == "SPY") %>%
+  #ungroup() %>% 
+  select(date, scaled_vol, price_sma_50, price_sma_200) %>% 
+  gather(stat, value, -date, -symbol) %>% 
   ggplot(aes(x = date, y = value, color = stat)) +
   geom_line() +
-  facet_wrap(~stat, scales =  "free", nrow = 2) 
+  facet_wrap(~stat + symbol, scales =  "free", ncol = 2) 
 
+```
+CCI, MACD and Signal for EEM and SPY
+
+```{r}
+funds_ff_full %>% 
+  filter(symbol == "EEM" | symbol == "SPY") %>% 
+  select(date, CCI, MACD, Signal) %>% 
+  gather(stat, value, -date, -symbol) %>% 
+  ggplot(aes(x = date, y = value, color = stat)) +
+  geom_line() +
+  facet_wrap(~stat + symbol, scales =  "free", ncol = 2) 
 ```
 
 
 ```{r}
 funds_ff_full %>% 
-  filter(symbol == "EEM") %>%
+#  filter(symbol == "EEM") %>%
   ggplot(aes(x = scaled_vol)) +
-  geom_histogram(fill = "cornflowerblue", color = "pink", bins = 60) 
+  geom_histogram(fill = "cornflowerblue", color = "pink", bins = 60) +
+  facet_wrap(~symbol)
 
 ```
 
-
+sma 50, sma 200 and price time series
 ```{r}
-min_date <- "2006-01-01"
-max_date <- Sys.Date()
 
+ggplotly(
 funds_ff_full %>% 
-  filter(symbol == "IJS" &
-           date >= min_date &
-           date <= max_date) %>%
+  #filter(symbol == "IJS") %>%
   select(date, symbol, price, price_sma_200, price_sma_50) %>% 
   ggplot(aes(x = date)) +
   geom_line(aes(y = price), color = "purple", linetype = "dashed", alpha = .3) +
   geom_line(aes(y = price_sma_200), color = "cornflowerblue") +
   geom_line(aes(y = price_sma_50), color = "pink") +
-  labs(x = "prices") 
-
+  labs(x = "", y = "price stats") +
+  facet_wrap(~symbol, scales = "free")
+)
 ```
 
-
-```{r}
-funds_ff_full %>% 
-  filter(symbol == "IJS") %>%
-  ungroup() %>% 
-  select(date, -symbol, price, price_sma_200, price_sma_50) %>% 
-  gather(stat, value, -date) %>% 
-  hchart(., hcaes(x = date, y = value, group = stat), type = "line") %>%
-  hc_title(text = "SMA 50 v. SMA 200") %>% 
-      hc_xAxis(type = 'datetime') %>% 
-  hc_navigator(enabled = FALSE) %>% 
-  hc_scrollbar(enabled = FALSE) %>% 
-  hc_legend(enabled = TRUE) %>% 
-  hc_exporting(enabled = TRUE) 
-```
