@@ -78,7 +78,6 @@ library(tidyverse)
 library(tidyquant)
 library(timetk)
 library(tibbletime)
-library(highcharter)
 library(readxl)
 library(corrr)
 library(scales)
@@ -287,20 +286,6 @@ ggplotly(
 )
 ```
 
-### Interactve charting with highcharter
-
-What is highcharter? An R package that wraps a javascript package - also called an html widget. 
-
-htmlwidgets.org - JavaScript libraries that have been ported to R. The ecosystem keeps growing and data visualization is becoming part of the skill stack.
-
-```{r}
-price_volume %>%
-  hchart(., hcaes(x = date, y = price, group = symbol),
-         type = "line") %>% 
-  hc_title(text = "Daily Prices") %>% 
-  hc_tooltip(pointFormat = "{point.symbol}: ${point.price: .2f}")
-```
-
 
 
 ## Merging multiple data sources
@@ -432,7 +417,7 @@ funds_ff_full <-
             n = 20) %>% 
   na.omit()
 
-save(funds_ff_full, file = "funds_ff_full.RData")
+saveRDS(funds_ff_full, file = "funds_ff_full.rds")
 ```
 
 ### Visualizations
@@ -442,7 +427,7 @@ We could head straight to modeling this data and extracting predictions but I li
 SMA 50, SMA 200 and scaled volume for EEM and SPY
 
 ```{r}
-funds_ff_full %>% 
+(funds_ff_full %>% 
   filter(symbol == "EEM" | symbol == "SPY") %>%
   #ungroup() %>% 
   select(date, scaled_vol, price_sma_50, price_sma_200) %>% 
@@ -450,8 +435,11 @@ funds_ff_full %>%
   ggplot(aes(x = date, y = value, color = stat)) +
   geom_line() +
   facet_wrap(~stat + symbol, scales =  "free", ncol = 2) 
+) %>% 
+  ggplotly()
 
 ```
+
 CCI, MACD and Signal for EEM and SPY
 
 ```{r}
@@ -462,16 +450,18 @@ funds_ff_full %>%
   ggplot(aes(x = date, y = value, color = stat)) +
   geom_line() +
   facet_wrap(~stat + symbol, scales =  "free", ncol = 2) 
+
 ```
 
 
 ```{r}
-funds_ff_full %>% 
+(funds_ff_full %>% 
   #  filter(symbol == "EEM") %>%
   ggplot(aes(x = scaled_vol)) +
   geom_histogram(fill = "cornflowerblue", color = "pink", bins = 60) +
   facet_wrap(~symbol)
-
+) %>% 
+  ggplotly()
 ```
 
 sma 50, sma 200 and price time series

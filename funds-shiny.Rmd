@@ -1,0 +1,226 @@
+---
+title: "Funds app"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    vertical_layout: fill
+    orientation: rows
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(tidyquant)
+library(tidyverse)
+library(timetk)
+library(broom)
+library(highcharter)
+library(data.table)
+library(DT)
+library(plotly)
+
+# Load up our data from the Notebook
+# Or do we prefer public data? 
+# Or from a database? 
+funds_ff_full <- readRDS("funds_ff_full.rds")
+
+funds <- 
+  funds_ff_full %>% 
+  select(symbol) %>% 
+  slice(1) %>% 
+  pull()
+
+features <- 
+  funds_ff_full %>% 
+  ungroup() %>% 
+  select(MKT, SMB, HML, RMW, CMA) %>%
+  colnames() 
+```
+
+
+Sidebar {.sidebar}
+================================
+
+```{r}
+helpText("Choose the Fund.")
+
+selectInput("fund", 
+             label = "Select a Fund", 
+             choices = funds, 
+             selected = "SPY")
+
+selectInput("factor", 
+             label = "Select a Factor", 
+             choices = features, 
+             selected = "SMB")
+
+dateRangeInput("dates", 
+               "dates", 
+               start = "2007-11-01", 
+               end = "2019-01-31", min = "2007-11-01", max = "2019-01-31")
+ 
+ 
+actionButton("go", "Submit", icon = icon("cog", lib = "glyphicon"))
+ 
+# for display in raw data page
+selected_fund <- eventReactive(input$go, {
+  funds_ff_full %>% 
+    filter(symbol == input$fund)
+}) 
+
+
+selected_fund_factor <- eventReactive(input$go, {
+
+  
+  selected_fund() %>% 
+    filter(date > input$dates[1] &
+           date < input$dates[2]) %>% 
+    select(date, symbol, daily_returns, input$factor) %>% 
+    rename(factor = input$factor)
+}) 
+
+augmented_results <- eventReactive(input$go, {
+
+  selected_fund_factor <- selected_fund_factor()
+
+  selected_fund_factor() %>%
+  # Our model: We could run any model we want here.
+  # Any R function, even call an API.
+  do(model = lm(daily_returns ~ factor, data = .)) %>%
+  augment(model) %>%
+  mutate(date = selected_fund_factor$date)
+
+})
+```
+
+Page 1
+================================
+
+Row 1 {.tabset}
+---------------------------------------
+
+### Rolling prices plotly
+
+```{r}
+renderPlotly({
+  
+chosen_fund <- eventReactive(input$go, {
+  
+  selected_fund() %>% 
+    filter(date > input$dates[1] &
+           date < input$dates[2]) %>% 
+    ungroup() %>% 
+     select(date, -symbol, price, price_sma_200, price_sma_50) %>%
+     gather(stat, value, -date)
+}) 
+  
+  chosen_fund() %>% 
+    plot_ly(x = ~date, y = ~value, color = ~stat, type = 'scatter', mode = 'lines')
+})
+```
+
+### Model results plotly
+
+```{r}
+renderPlotly({
+validate(need(input$go, "Please choose a  fund and a factor"))
+  
+# (augmented_results() %>% 
+#   ggplot(aes(x = factor, 
+#              y = daily_returns)) +
+#   geom_point(color = "pink") +
+#   geom_line(aes(x = factor, y = .fitted), color = "cornflowerblue")
+# ) %>% 
+#   ggplotly()
+  
+  augmented_results() %>%
+  plot_ly(x = ~factor) %>%
+  add_markers(y = ~daily_returns) %>%
+  add_lines(x = ~factor, y = ~.fitted)
+
+
+})
+```
+
+
+Row 2 {.tabset}
+----------------------
+
+### Price and vol
+
+```{r}
+
+renderPlotly({
+validate(need(input$go, "Please choose a  fund and a factor")) 
+chosen_fund_2 <- eventReactive(input$go, {
+  
+  selected_fund() %>% 
+    filter(date > input$dates[1] &
+           date < input$dates[2]) %>% 
+    ungroup() %>% 
+     select(date, -symbol, price, scaled_vol, price_sma_50) %>%
+     gather(stat, value, -date)
+}) 
+ggplotly( 
+chosen_fund_2() %>% 
+  ggplot(aes(x = date, y = value, color = stat)) +
+  geom_line() +
+  facet_wrap(~stat, scales =  "free", nrow = 2)
+)  
+})
+
+```
+
+### Scatter by date
+
+```{r}
+
+renderPlot({
+  
+validate(need(input$go, "Please choose a  fund and a factor"))
+selected_fund_factor() %>%  
+  ggplot(aes(x = date, 
+             y = daily_returns)) + 
+  geom_point(color = "blue")
+  
+})
+
+```
+
+### Histogram
+```{r}
+renderPlot({
+  
+chosen_fund_3 <- eventReactive(input$go, {
+  
+  selected_fund() %>% 
+    filter(date > input$dates[1] &
+           date < input$dates[2]) 
+})
+  
+
+chosen_fund_3() %>% 
+  ggplot(aes(x = scaled_vol)) +
+  geom_histogram(fill = "cornflowerblue", color = "pink", bins = 60) 
+})
+```
+
+
+Raw Data
+==================================
+
+Row 
+---------------------
+
+### Fund
+
+```{r}
+renderDataTable(
+selected_fund() %>% 
+  datatable(., 
+            fillContainer = TRUE, 
+            extensions = 'Buttons', 
+            options = list(dom = 'Bfrtip', 
+                           buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+)
+```
